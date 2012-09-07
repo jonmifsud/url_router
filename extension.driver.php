@@ -3,6 +3,7 @@
 	Class Extension_Url_Router extends Extension{
 
 		private $_hasrun = false;
+		private $_params = array();
 
 		public function about()
 		{
@@ -82,6 +83,11 @@
 					'callback'	=> 'frontendPrePageResolve'
 				),
 				array(
+					'page'		=> '/frontend/',
+					'delegate'	=> 'FrontendParamsResolve',
+					'callback'	=> 'frontendParamsResolve'
+				),
+				array(
 					'page'		=> '/system/preferences/',
 					'delegate'	=> 'AddCustomPreferenceFieldsets',
 					'callback'	=> 'addCustomPreferenceFieldsets'
@@ -116,11 +122,12 @@
 				if (!$names) continue;
 
 				$new  = preg_replace('/:[[0-9a-zA-Z_]+/', '([a-zA-Z0-9_\+\-%]+)', $route['from']);
-				$new  = '/'. trim($new, '/');
+				$new  = '/'. trim($new, '/') . '/';
 				$new  = '/'. str_replace('/', "\/", $new);
 				$new .= '/i';
 
-				$to = '/'. trim($route['to'], '/');
+				// $to = '/'. trim($route['to'], '/');
+				$to = $route['to'];
 				foreach ($names as $k => $n)
 					$to = str_replace($n, '$'. ($k +1), $to);
 
@@ -154,7 +161,14 @@
 				if(preg_match($route['from'], $path, $matches) == 1)
 				{
 					$route['routed'] = preg_replace($route['from'], $route['to'], $path);
-
+					$route['complete-routed'] = $route['routed'] ;
+					$route['params'] = array();
+					$params = strstr($route['routed'],'?');
+					if ($params){
+						$route['routed'] =strstr($route['routed'],'?',true);
+						parse_str ( trim($params, '?'), $route['params']);
+					}
+// var_dump($route['routed']);var_dump($route['params']);die;
 					$route['original'] = $path;
 
 					$return = $route;
@@ -166,6 +180,15 @@
 			return $return;
 		}
 
+		public function frontendParamsResolve($context)
+		{
+			if (!empty($this->_params))
+			{
+				//todo add `url-` in front of the parameters
+				$context['params'] = array_merge($context['params'], $this->_params);
+				// var_dump($context['params']);die;
+			}
+		}
 		/**
 		 * Save the routes from the preferences into the database
 		 *
@@ -448,17 +471,20 @@
 						// If the page can resolve, but is route the route says to force
 						if(!empty($page_can_resolve) && $route['type'] == 'route' && $route['http301'] == 'yes')
 						{
-							$context['page'] = $route['routed'];
+							$context['page'] = trim ($route['routed'],'/');
+							$this->_params = $route['params'];
+							// $context['page'] = trim ($route['routed'],'/');
 						}
 						// If the page can't resolve, and is route
 						elseif(empty($page_can_resolve) && $route['type'] == 'route')
 						{
 							$context['page'] = $route['routed'];
+							$this->_params = $route['params'];
 						}
 						// If is redirect
 						elseif($route['type'] == 'redirect')
 						{
-							$context['page'] = $route['routed'];
+							$context['page'] = $route['complete-routed'];
 							if($route['http301'] === 'yes')
 							{
 								header("Location:" . $context['page'], true, 301);
@@ -469,6 +495,8 @@
 							}
 							die;
 						}
+						// var_dump( trim ($route['routed'],'/'));die;
+						
 					}
 					else
 					{
